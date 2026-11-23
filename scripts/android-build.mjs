@@ -9,6 +9,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const args = process.argv.slice(2);
 const help = `PalmChat Android 构建
 
+  node scripts/android-build.mjs                         # 通用调试包，首次启动填写服务端
   node scripts/android-build.mjs --api-url https://你的服务端域名
   node scripts/android-build.mjs --release --api-url https://你的服务端域名 --version-code 15 --version-name 0.4.0
   添加 --unsigned 可生成待签名 APK，添加 --evaluation 可用本地测试证书签署 release 验收包。
@@ -68,13 +69,13 @@ try {
   if ((unsigned || evaluation) && !production || unsigned && evaluation) throw new Error('请在 --release 下选择一种签名方式。');
   const urlPosition = args.indexOf('--api-url');
   const rawUrl = urlPosition >= 0 ? args[urlPosition + 1] : process.env.VITE_API_BASE_URL;
-  if (!rawUrl) throw new Error(`必须指定可访问的服务端地址。\n${help}`);
-  const apiUrl = new URL(rawUrl);
-  const apiBase64 = Buffer.from(apiUrl.href.replace(/\/$/, '')).toString('base64');
+  if (production && !rawUrl) throw new Error(`正式构建必须指定 HTTPS 服务端地址。\n${help}`);
+  const apiUrl = rawUrl ? new URL(rawUrl) : null;
+  const apiBase64 = apiUrl ? Buffer.from(apiUrl.href.replace(/\/$/, '')).toString('base64') : '';
   const versioned = args.includes('--version-code');
   const versionCode = Number(option('--version-code', '1'));
   const versionName = option('--version-name', '0.1.0');
-  if (production && (apiUrl.protocol !== 'https:' || !versioned || !args.includes('--version-name') ||
+  if (production && (!apiUrl || apiUrl.protocol !== 'https:' || !versioned || !args.includes('--version-name') ||
       ['--allow-http', '--skip-web-build'].some(flag => args.includes(flag))))
     throw new Error('release 构建需要 HTTPS、显式版本号和版本名称，并重新编译前端。');
   let releaseKey;
@@ -86,13 +87,13 @@ try {
   }
   if (!Number.isSafeInteger(versionCode) || versionCode < 1 || versionCode > 2100000000 ||
       !/^[0-9][A-Za-z0-9.-]{0,47}$/.test(versionName)) throw new Error('安卓版本号或版本名称无效。');
-  if (!['https:', 'http:'].includes(apiUrl.protocol) || apiUrl.username || apiUrl.password || apiUrl.search || apiUrl.hash || !['', '/', '/api', '/api/'].includes(apiUrl.pathname)) {
+  if (apiUrl && (!['https:', 'http:'].includes(apiUrl.protocol) || apiUrl.username || apiUrl.password || apiUrl.search || apiUrl.hash || !['', '/', '/api', '/api/'].includes(apiUrl.pathname))) {
     throw new Error('API 地址只能是没有凭据或查询参数的 HTTP(S) 站点地址，可选 /api 路径。');
   }
-  if (['localhost', '127.0.0.1', '[::1]'].includes(apiUrl.hostname)) {
+  if (apiUrl && ['localhost', '127.0.0.1', '[::1]'].includes(apiUrl.hostname)) {
     throw new Error('手机上的 localhost 指向手机本身，请使用电脑局域网 IP 或可访问的 HTTPS 域名。');
   }
-  if (apiUrl.protocol === 'http:' && !args.includes('--allow-http')) {
+  if (apiUrl?.protocol === 'http:' && !args.includes('--allow-http')) {
     throw new Error('HTTP 仅供局域网调试；确认是调试地址后显式添加 --allow-http。');
   }
   const config = JSON.parse(await readFile(resolve(root, 'capacitor.config.json'), 'utf8'));
@@ -112,7 +113,7 @@ try {
     VITE_API_BASE_URL: '',
     VITE_API_BASE64: apiBase64,
     PALM_VERSION_CODE: String(versionCode), PALM_VERSION_NAME: versionName,
-    VITE_NATIVE_DEBUG: apiUrl.protocol === 'http:' ? 'true' : 'false',
+    VITE_NATIVE_DEBUG: !apiUrl || apiUrl.protocol === 'http:' ? 'true' : 'false',
     VITE_DEBUG_BUILD: production ? 'false' : 'true',
   };
   if (!args.includes('--skip-web-build')) {
@@ -122,7 +123,7 @@ try {
   const html = await readFile(resolve(root, 'dist/index.html'), 'utf8');
   const bundles = [...html.matchAll(/src="\/?(assets\/[^"?]+\.js)"/g)].map((match) => match[1]);
   const bundleSource = (await Promise.all(bundles.map((path) => readFile(resolve(root, 'dist', path), 'utf8')))).join('\n');
-  if (!bundleSource.includes(apiBase64)) throw new Error('dist 未包含指定 API 来源；不能将旧构建误打成该地址的安装包。请去掉 --skip-web-build 重建。');
+  if (apiBase64 && !bundleSource.includes(apiBase64)) throw new Error('dist 未包含指定 API 来源；不能将旧构建误打成该地址的安装包。请去掉 --skip-web-build 重建。');
 
   await mkdir(resolve(root, '.android-sdk'), { recursive: true });
   const debugKey = resolve(root, '.android-sdk/debug.keystore');
@@ -168,8 +169,8 @@ try {
   const packagedConfig = JSON.parse(strFromU8(zip['assets/capacitor.config.json']));
   if (packagedConfig.server?.url) throw new Error('APK 中发现远程页面地址，打包验证未通过。');
   if (!zip['assets/public/index.html']) throw new Error('APK 未包含本地界面。');
-  const apiPresent = Object.entries(zip).some(([name, bytes]) => name.startsWith('assets/public/assets/') && name.endsWith('.js') && strFromU8(bytes).includes(apiBase64));
-  if (!apiPresent) throw new Error('APK 内未找到指定的 API 来源。');
+  const apiPresent = apiBase64 && Object.entries(zip).some(([name, bytes]) => name.startsWith('assets/public/assets/') && name.endsWith('.js') && strFromU8(bytes).includes(apiBase64));
+  if (apiBase64 && !apiPresent) throw new Error('APK 内未找到指定的 API 来源。');
   const localStorePresent = Object.entries(zip).some(([name, bytes]) => /^classes\d*\.dex$/.test(name) && Buffer.from(bytes).includes(Buffer.from('LocalChatStorePlugin')));
   if (!localStorePresent) throw new Error('APK 未包含本地加密聊天插件。');
   await mkdir(resolve(root, 'artifacts'), { recursive: true });
@@ -180,7 +181,7 @@ try {
   const apkBytes = await readFile(artifact);
   const sha256 = createHash('sha256').update(apkBytes).digest('hex');
   await writeFile(`${artifact}.sha256`, `${sha256}  ${stem}.apk\n`);
-  const release = { applicationId: config.appId, versionCode, versionName: installedName, signerSha256, sha256, apiOrigin: apiUrl.origin };
+  const release = { applicationId: config.appId, versionCode, versionName: installedName, signerSha256, sha256, apiOrigin: apiUrl?.origin || '' };
   const infoName = versioned ? stem + '-build-info.json' : 'android-build-info.json';
   await writeFile(resolve(root, 'artifacts', infoName), `${JSON.stringify({
     ...release, version: installedName, debug: !production, signing: production ? variant : 'debug',
@@ -190,7 +191,7 @@ try {
   }, null, 2)}\n`);
   console.log(`\n已生成 ${production ? variant : 'debug'} APK：${artifact}`);
   console.log(`SHA-256：${sha256}`);
-  console.log(`服务端来源：${apiUrl.origin}`);
+  console.log(apiUrl ? `服务端来源：${apiUrl.origin}` : '服务端来源：未预置（首次启动在应用内填写）');
 } catch (error) {
   console.error(error.message);
   process.exitCode = 1;

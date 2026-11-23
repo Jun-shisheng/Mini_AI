@@ -215,6 +215,51 @@ function UseNotice({ onClose, native, config }) {
   </Modal>;
 }
 
+function ServerDialog({ onClose, onSave, current, required }) {
+  const [value, setValue] = useState(current || "");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function submit(event) {
+    event.preventDefault();
+    setError("");
+    setBusy(true);
+    try {
+      await onSave(value.trim());
+    } catch (e) {
+      setError(e.message);
+      setBusy(false);
+    }
+  }
+  return (
+    <Modal title="连接服务端" subtitle="填写你自己部署的 PalmChat 服务地址。"
+      onClose={required ? () => {} : onClose} dismissible={!required} className="server-modal">
+      <form className="form-stack" onSubmit={submit}>
+        <label>
+          服务地址
+          <input
+            autoFocus
+            autoComplete="url"
+            spellCheck={false}
+            inputMode="url"
+            placeholder="https://chat.example.com"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+          />
+        </label>
+        <p className="settings-note">
+          正式安装包要求 HTTPS；调试包可以填局域网 HTTP 地址，例如 http://192.168.1.10:8787。
+          可以带 <code>/api</code>，也可以只填域名。切换服务端会退出当前登录。
+        </p>
+        {error && <p className="form-error" role="alert">{error}</p>}
+        <button className="button primary full" disabled={busy || !value.trim()}>
+          {busy ? "保存中…" : "保存并连接"}
+        </button>
+        {!required && <button type="button" className="button secondary full" onClick={onClose}>取消</button>}
+      </form>
+    </Modal>
+  );
+}
+
 function ByokDialog({ onClose, current, onSave, onClear, serverMode }) {
   const [provider, setProvider] = useState(current?.provider || "deepseek");
   const [key, setKey] = useState("");
@@ -288,4 +333,4 @@ function ByokDialog({ onClose, current, onSave, onClear, serverMode }) {
   );
 }
 
-export { IconButton, Modal, AuthDialog, ImportDialog, UseNotice, ByokDialog };
+export { IconButton, Modal, AuthDialog, ImportDialog, UseNotice, ByokDialog, ServerDialog };

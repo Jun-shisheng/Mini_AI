@@ -22,3 +22,5 @@ capacitor.config.debug.json
 artifacts/
 dist/
 updates/
+
+android/app/src/main/assets/public/

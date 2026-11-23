@@ -34,9 +34,10 @@ import {
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api, streamChat, handleAppPause, uploadFile, speechAsr, speechTts } from "./api.js";
-import { getConnectionInfo, clearNativeSession, restoreNativeSession } from "./native.js";
-import { AuthDialog, ByokDialog, IconButton, ImportDialog, Modal, UseNotice } from "./dialogs.jsx";
+import { getConnectionInfo, clearNativeSession, restoreNativeSession, restoreNativeBaseUrl, setNativeBaseUrl } from "./native.js";
+import { AuthDialog, ByokDialog, IconButton, ImportDialog, Modal, ServerDialog, UseNotice } from "./dialogs.jsx";
 import { loadByok, saveByok, clearByok } from "./byok.js";
+restoreNativeBaseUrl();
 const localChatVault = registerPlugin('LocalChatStore');
 const voiceRecorder = registerPlugin('VoiceRecorder');
 
@@ -295,6 +296,9 @@ export default function App() {
   useEffect(() => {
     loadByok().then((value) => setByok(value)).catch(() => {});
   }, []);
+  useEffect(() => {
+    if (connection.native && !connection.configured) setDialog('server');
+  }, [connection.native, connection.configured]);
 
   function report(error) {
     lastErrorRef.current = {
@@ -1274,6 +1278,14 @@ export default function App() {
         <ImportDialog onClose={() => setDialog(null)} onImport={importChats} />
       )}
       {dialog === 'export' && <Modal title="导出聊天记录" subtitle="此对话的文字消息将保存为明文 JSON。你可以通过「导入聊天记录」恢复这些文字。" onClose={()=>setDialog(null)}><button className="button primary full" type="button" onClick={exportChat}><Download size={17}/>{connection.native?'选择保存位置':'下载备份文件'}</button></Modal>}
+      {dialog === 'server' && (
+        <ServerDialog
+          current={connection.configured ? connection.baseUrl.replace(/\/api$/u, '') : ''}
+          required={!connection.configured}
+          onClose={() => setDialog(null)}
+          onSave={(value) => { setNativeBaseUrl(value); window.location.reload(); }}
+        />
+      )}
       {dialog === 'byok' && (
         <ByokDialog
           current={byok}
@@ -1304,6 +1316,14 @@ export default function App() {
                     : "未连接"}
               </strong>
             </div>
+            {connection.native && (
+              <div>
+                <span>服务地址</span>
+                <button className="text-button" type="button" onClick={() => setDialog('server')}>
+                  {connection.configured ? connection.baseUrl.replace(/\/api$/u, '') : '未设置，点击填写'}
+                </button>
+              </div>
+            )}
             <div>
               <span>模型密钥</span>
               <button className="text-button" type="button" onClick={() => setDialog('byok')}>

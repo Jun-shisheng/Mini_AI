@@ -8,6 +8,7 @@ const buildApiBaseUrl = encodedApiBase
   ? (() => { try { return atob(encodedApiBase); } catch { return ''; } })()
   : (buildEnvironment.VITE_API_BASE_URL || '');
 const buildNativeDebug = buildEnvironment.VITE_NATIVE_DEBUG === 'true';
+export const NATIVE_BASE_STORAGE_KEY = 'palm-api-base';
 
 export class ConnectionError extends Error {
   constructor(message, code) {
@@ -65,9 +66,11 @@ export function createConnectionManager({
 } = {}) {
   let sessionToken = '';
   let sessionExpiresAt = 0;
+  let runtimeBaseUrl = '';
   const resetMemory = () => { sessionToken = ''; sessionExpiresAt = 0; };
   const clearSession = () => { resetMemory(); clearPersistedSession(); };
-  const info = () => resolveConnectionInfo({ native: Boolean(isNativePlatform()), apiBaseUrl, debug: nativeDebug === true });
+  const effectiveBaseUrl = () => runtimeBaseUrl || apiBaseUrl;
+  const info = () => resolveConnectionInfo({ native: Boolean(isNativePlatform()), apiBaseUrl: effectiveBaseUrl(), debug: nativeDebug === true });
   function activeToken() {
     if (sessionToken && sessionExpiresAt <= now()) clearSession();
     return sessionToken;
@@ -80,6 +83,29 @@ export function createConnectionManager({
         expiresAt: token ? new Date(sessionExpiresAt).toISOString() : null };
     },
     clearSession,
+    /** Read a server address saved on the device. Never called for browser sessions. */
+    restoreBaseUrl() {
+      if (!isNativePlatform()) return '';
+      try {
+        const saved = localStorage.getItem(NATIVE_BASE_STORAGE_KEY) || '';
+        if (!saved) return '';
+        const check = resolveConnectionInfo({ native: true, apiBaseUrl: saved, debug: nativeDebug === true });
+        if (!check.configured) { localStorage.removeItem(NATIVE_BASE_STORAGE_KEY); return ''; }
+        runtimeBaseUrl = check.baseUrl.replace(/\/api$/u, '');
+      } catch { runtimeBaseUrl = ''; }
+      return runtimeBaseUrl;
+    },
+    /** Save a user-entered server address and drop the old server's session. */
+    setBaseUrl(value) {
+      if (!isNativePlatform()) throw new ConnectionError('网页版使用当前站点作为服务端。', 'NATIVE_ONLY');
+      const check = resolveConnectionInfo({ native: true, apiBaseUrl: value, debug: nativeDebug === true });
+      if (!check.configured) throw new ConnectionError(check.error, check.code);
+      runtimeBaseUrl = check.baseUrl.replace(/\/api$/u, '');
+      try { localStorage.setItem(NATIVE_BASE_STORAGE_KEY, runtimeBaseUrl); } catch { /* private mode */ }
+      clearSession();
+      return runtimeBaseUrl;
+    },
+    getBaseUrl() { return effectiveBaseUrl(); },
     acceptSession(data) {
       if (!info().native) return;
       resetMemory();
@@ -131,3 +157,6 @@ export const nativeConnection = createConnectionManager();
 export const getConnectionInfo = () => nativeConnection.getConnectionInfo();
 export const clearNativeSession = () => nativeConnection.clearSession();
 export const restoreNativeSession = () => nativeConnection.restoreSession();
+export const restoreNativeBaseUrl = () => nativeConnection.restoreBaseUrl();
+export const setNativeBaseUrl = (value) => nativeConnection.setBaseUrl(value);
+export const getNativeBaseUrl = () => nativeConnection.getBaseUrl();

@@ -79,22 +79,39 @@ node --env-file=.env server/index.mjs
 
 这些选项保存在本机，可随时一键恢复默认。没有订阅、支付、兑换码、邀请、更新推送或分享链接抓取；开源版只保留聊天、账户、本机记录、文件导入导出和 BYOK。
 
-## 自己打包 Android
+## Android 手机端
 
-需要 JDK 21、Android SDK Platform 36、Build Tools 36.0.0。
+这是移动端优先的项目。安装包不预置服务器、不预置 Key，首次启动时在应用内填写：
+
+1. **服务地址**：你自己部署的 PalmChat 服务端，例如 `https://chat.example.com`。
+2. 注册/登录本地账号。
+3. **模型与密钥**：填入自己的 DeepSeek / OpenRouter Key。
+
+服务地址和 Key 都保存在手机上；切换服务地址会自动退出旧登录。调试包允许局域网 HTTP，正式包只允许 HTTPS。
+
+### 通用调试包
+
+需要一个安装包给多个人用时，直接构建不绑定服务器的通用包：
 
 ~~~bash
-# 调试包（可连接局域网 HTTP 服务）
-node scripts/android-build.mjs --api-url http://你的电脑局域网IP:8787 --allow-http
-
-# 正式包（必须 HTTPS）
-node scripts/android-build.mjs --release --unsigned \
-  --api-url https://你的域名.example --version-code 1 --version-name 1.0.0
+node scripts/android-build.mjs --version-code 1 --version-name 1.0.0
 ~~~
 
-- 安装包的包名是 `com.example.palmchat`，正式发布前请改成自己的包名，并创建自己的签名证书。
+如果已知固定服务端，也可以直接写入：
+
+~~~bash
+# 局域网调试（HTTP）
+node scripts/android-build.mjs --api-url http://你的电脑局域网IP:8787 --allow-http
+
+# 正式包（必须 HTTPS，需自己的签名）
+node scripts/android-build.mjs --release --unsigned   --api-url https://你的域名.example --version-code 1 --version-name 1.0.0
+~~~
+
+需要 JDK 21、Android SDK Platform 36、Build Tools 36.0.0。产物在 `artifacts/`。
+
+- 安装包包名是 `com.example.palmchat`，正式发布前请改成自己的包名，并创建自己的签名证书。
 - 构建脚本会在 `.android-sdk/` 下生成调试证书；该目录和所有 `*.keystore` 都不应提交。
-- 安装包内不包含任何 API Key。
+- 安装包内不包含任何 API Key 或服务器地址（通用包）。
 
 ## 服务端配置
 

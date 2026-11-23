@@ -253,3 +253,29 @@ test('streaming chat attaches the BYOK key headers only when a key is configured
     else delete globalThis.localStorage;
   }
 });
+
+test('a native build without a baked server can store and use a runtime address', () => {
+  const memory = new Map();
+  const previousStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: {
+    getItem: (key) => memory.get(key) ?? null,
+    setItem: (key, value) => memory.set(key, String(value)),
+    removeItem: (key) => memory.delete(key),
+  } });
+  try {
+    const manager = createConnectionManager({ isNativePlatform: () => true, apiBaseUrl: '' });
+    assert.equal(manager.getConnectionInfo().configured, false);
+    assert.throws(() => manager.setBaseUrl('http://192.168.1.10:8787'), /HTTPS/u);
+    assert.equal(manager.setBaseUrl('https://self.example/companion/api'), 'https://self.example/companion');
+    assert.equal(manager.getConnectionInfo().configured, true);
+    assert.equal(manager.prepareRequest('/config').url, 'https://self.example/companion/api/config');
+    const restored = createConnectionManager({ isNativePlatform: () => true, apiBaseUrl: '' });
+    assert.equal(restored.restoreBaseUrl(), 'https://self.example/companion');
+    assert.equal(restored.prepareRequest('/chat').url, 'https://self.example/companion/api/chat');
+    manager.setBaseUrl('https://other.example');
+    assert.equal(manager.getConnectionInfo().authenticated, false);
+  } finally {
+    if (previousStorage) Object.defineProperty(globalThis, 'localStorage', previousStorage);
+    else delete globalThis.localStorage;
+  }
+});
