@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Keystore keys do not migrate with ciphertext. Restore only via explicit JSON exports. -->
+    <exclude domain="file" path="palm-chat-v1/" />
+    <exclude domain="root" path="app_webview/" />
+</full-backup-content>

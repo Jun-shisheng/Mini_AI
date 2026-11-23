@@ -1,0 +1,35 @@
+{
+  "name": "palmchat-open",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "PalmChat · 自带 API Key 的开源移动聊天应用（DeepSeek / OpenRouter）",
+  "license": "MIT",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "start": "node --env-file-if-exists=.env server/index.mjs",
+    "build": "vite build",
+    "postbuild": "node scripts/finalize-pwa.mjs",
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "node --test",
+    "android:sync": "cap sync android",
+    "android:open": "cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.6.2",
+    "@capacitor/core": "8.6.2",
+    "fflate": "0.8.3",
+    "lucide-react": "1.74.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "react-markdown": "10.1.0",
+    "remark-gfm": "4.0.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.6.2",
+    "vite": "8.3.8"
+  }
+}
